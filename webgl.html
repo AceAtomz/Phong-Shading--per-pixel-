@@ -18,63 +18,64 @@
 
 "use strict";
 
-const vertexShaderSource = `
+const vertexShaderSource=`
     attribute vec3 a_coords;
     attribute vec3 a_normal;
 
     uniform mat4 modelview;
     uniform mat4 projection;
+    uniform mat3 normalMatrix;
 
-    varying vec3 v_normal;
-    varying vec3 v_eyeCoords;
-    void main() {
-        //----------------------------------------------------- transform
+    uniform vec4 lightPosition;
+    uniform vec4 diffuseColor;
+    uniform vec3 specularColor;
+    uniform float specularExponent;
+
+    varying vec4 v_color;
+
+    void main(){
+        //transforms
         vec4 coords = vec4(a_coords, 1.0);
-        vec4 eyeCoords = modelview*coords;
+        vec4 eyeCoords = modelview *coords;
         gl_Position = projection*eyeCoords;
-        v_normal = normalize(a_normal);
-        v_eyeCoords = eyeCoords.xyz/eyeCoords.w;
-    }`;
 
-const fragmentShaderSource = `
+        //color (light)
+        vec3 L, N, V,R;
+        N = normalize(normalMatrix*a_normal);
+
+        if(lightPosition.w==0.0){
+            L = normalize(lightPosition.xyz);
+        }else{
+            L = normalize(lightPosition.xyz/lightPosition.w - eyeCoords.xyz);
+        }
+
+        R= -reflect(L,N);
+        V = normalize(-eyeCoords.xyz);
+
+        if(dot(L,N)<=0.0){
+            v_color = vec4(0,0,0,1);
+        }else{
+            vec3 color = 0.8*dot(L,N)*diffuseColor.rgb;
+            if(dot(V,R)>0.0){
+                color+=0.4*pow(dot(V,R), specularExponent)*specularColor;
+            }
+            v_color = vec4(color, diffuseColor.a);
+        }
+    }
+`;
+
+const fragmentShaderSource=`
     #ifdef GL_FRAGMENT_PRECISION_HIGH
        precision highp float;
     #else
        precision mediump float;
     #endif
 
-    uniform mat3 normalMatrix;
-
-    uniform vec4 diffuseColor;
-    uniform vec4 lightPosition;
-    uniform vec3 specularColor;
-    uniform float specularExponent;
-
-    varying vec3 v_normal;
-    varying vec3 v_eyeCoords;
+    varying vec4 v_color;
     void main(){
-        //----------------------------------------------------- light equation
-        vec3 L,N,R,V;
-        if(lightPosition.w==0.0){
-            L = normalize(lightPosition.xyz);
-        }else{
-            L = normalize(lightPosition.xyz/lightPosition.w - v_eyeCoords);
-        }
-        N = normalize(normalMatrix*v_normal);
-        R = -reflect(L,N);
-        V = normalize(-v_eyeCoords);
-
-        if(dot(L,N)<=0.0){
-            gl_FragColor = vec4(0,0,0,1);
-        }else{
-            vec3 color = 0.8*diffuseColor.rgb*dot(L,N);
-            if(dot(V,R)>0.0){
-                color += 0.4*specularColor*pow(dot(V,R), specularExponent);
-            }
-            gl_FragColor = vec4(color, diffuseColor.a);
-        }
-    }`;
-
+        gl_FragColor = v_color;
+    }
+`;
 
 let gl;   // The webgl context.
 
